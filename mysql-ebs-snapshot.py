@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# mysql=ebs-snapshot v1.0
+# mysql-ebs-snapshot v1.0
 # Copyright 2015 Ivgeni Segal
 #
 # This program is free software: you can redistribute it and/or modify
