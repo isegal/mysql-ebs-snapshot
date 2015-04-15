@@ -50,6 +50,9 @@ NO_SNAPSHOT = False
 
 XFS_FREEZE_BIN = '/usr/sbin/xfs_freeze'
 
+# Number of snapshots to keep. If using RAID, this will be multiplied by the number of EBS drives
+KEEP_NUM_SNAPSHOTS = 8
+
 # Path to the log file, if not set STDOUT will be used.
 LOG_FILE = '/var/log/mysql-ebs-snapshot/mysql-ebs-snapshot.log'
 
@@ -73,6 +76,36 @@ def setup_logging():
 
 def snapshot_tag_str():
 	return time.strftime("%Y%m%d_%H%M%S") + '_' + instance_tag_name
+
+def get_snapshots():
+	res = []
+	unique = set()
+	snapshots = ec2_conn.get_all_snapshots()
+	for snapshot in snapshots:
+		if 'Name' in snapshot.tags:
+			name_tag = snapshot.tags['Name']
+			if(re.match(r"\d{8}_\d{6}_" + instance_tag_name, name_tag)):
+				res.append(snapshot)
+				unique.add(name_tag)
+
+	return (res, sorted(unique))
+
+def clean_old_snapshots():
+	if not KEEP_NUM_SNAPSHOTS:
+		return
+	logging.info("Performing cleanup of old snapshots...")
+	(snapshots, tags) = get_snapshots()
+	logging.info("Total snapshots found: %s" %len(tags))
+	to_delete_count = len(tags) - KEEP_NUM_SNAPSHOTS
+	if(to_delete_count <= 0):
+		return
+	logging.info("Need to delete: %s" %to_delete_count)
+	for i in range(to_delete_count):
+		logging.info("Deleting old snapshot: %s" %tags[i])
+		for snap in snapshots:
+			if snap.tags['Name'] == tags[i]:
+				snap.delete()
+				logging.info("Deleted snapshot: %s" %snap.id)
 
 def mysql_connect():
 	global mysql_conn
@@ -218,8 +251,9 @@ def do_snapshot(mysql_data_dir):
 		# freeze the FS
 		fs_freeze(mount_point)
 
-		# create snapshots
+		# create new snapshots and clean the old ones
 		ebs_create_snapshots(volume_ids, extra_description_str)
+		clean_old_snapshots()
 	except:
 		logging.exception("!!!!!!!!!! EXCEPTION !!!!!!!!!!")
 		raise
