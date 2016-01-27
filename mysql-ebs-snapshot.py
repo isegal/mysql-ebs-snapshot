@@ -84,7 +84,7 @@ def get_snapshots():
 	for snapshot in snapshots:
 		if 'Name' in snapshot.tags:
 			name_tag = snapshot.tags['Name']
-			if(re.match(r"\d{8}_\d{6}_" + instance_tag_name, name_tag)):
+			if(re.match(r"\d{8}_\d{6}_" + instance_tag_name + "$", name_tag)):
 				res.append(snapshot)
 				unique.add(name_tag)
 
@@ -210,6 +210,10 @@ def ebs_create_snapshots(volume_ids, extra_description_str):
 def do_snapshot(mysql_data_dir):
 	global ec2_conn
 	global instance_tag_name
+	global KEEP_NUM_SNAPSHOTS
+
+	if os.environ.get('KEEP_NUM_SNAPSHOTS'):
+		KEEP_NUM_SNAPSHOTS = int(os.environ.get('KEEP_NUM_SNAPSHOTS'))
 
 	logging.info("########## STARTING SNAPSHOT ##########")
 	logging.info("Mysql data dir: " + str(mysql_data_dir))
@@ -228,6 +232,9 @@ def do_snapshot(mysql_data_dir):
 
 		inst = ec2_conn.get_only_instances(instance_ids=[instance_id])[0]
 		instance_tag_name = inst.tags['Name']
+		tag_suffix = os.environ.get('TAG_SUFFIX')
+		if tag_suffix:
+			instance_tag_name = instance_tag_name + '_' + tag_suffix
 		# for raid we'll need to extract actual disk list
 		disks = list_disks(device)
 		volume_ids = get_volume_ids(disks, instance_id)
